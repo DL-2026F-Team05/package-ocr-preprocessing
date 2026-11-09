@@ -1,0 +1,14 @@
+# 공통
+numpy
+pandas
+matplotlib
+
+# 이미지 처리 (AI 2)
+opencv-python
+
+# OCR (AI 1)
+paddleocr
+easyocr
+
+# 평가 지표 (CER, WER)
+jiwer
