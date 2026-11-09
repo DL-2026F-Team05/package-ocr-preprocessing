@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Jupyter / Colab
+.ipynb_checkpoints/
+
+# 코드로 만든 사진 (생성 코드로 다시 만들 수 있음)
+data/generated/
+
+# 대용량 데이터셋 원본
+data/external/
+
+# 모델 가중치
+*.pt
+*.pth
+*.onnx
+*.pdparams
+*.pdiparams
+*.h5
+*.ckpt
+
+# API 키, 비밀 정보
+.env
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
