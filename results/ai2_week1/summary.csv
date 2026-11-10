@@ -1,0 +1,7 @@
+﻿condition,condition_name,images,brightness,contrast,sharpness,glare_ratio,boxes_before,cer_before,recipe,boxes_after,cer_after,cer_change
+c0,정상,2,0.502,0.248,469.55,0.015,84.0,0.052,,,,
+c1,저조도,4,0.12,0.075,79.05,0.0,64.0,0.217,gamma+denoise+clahe,63.75,0.312,0.095
+c2,반사광,3,0.503,0.222,1058.9,0.007,64.0,0.072,glare+clahe,63.0,0.072,-0.0
+c3,흔들림,3,0.485,0.263,141.7,0.007,40.0,0.545,sharpen,34.0,0.56,0.015
+c4,구김,3,0.496,0.196,435.267,0.007,77.667,0.249,clahe+sharpen,67.333,0.262,0.012
+c5,작은 글씨·원거리,2,0.492,0.248,441.65,0.007,19.0,0.669,upscale+sharpen,19.0,0.632,-0.037
