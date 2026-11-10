@@ -1,1 +1,4 @@
 product_id,region,text
+p01,name,매운새우깡
+p01,allergen,"밀, 새우, 대두, 우유, 토마토, 게, 돼지고기, 쇠고기 함유"
+p01,expiry,2027.04.14
