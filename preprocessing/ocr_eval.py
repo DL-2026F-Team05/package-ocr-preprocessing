@@ -30,6 +30,8 @@ class OCREngine:
                 use_doc_unwarping=False,
                 use_textline_orientation=False,
                 enable_mkldnn=False,
+                text_det_limit_type="max",
+                text_det_limit_side_len=1280,
             )
         elif engine == "easyocr":
             import easyocr
