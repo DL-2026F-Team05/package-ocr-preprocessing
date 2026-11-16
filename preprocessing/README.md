@@ -6,25 +6,39 @@
 
 | 파일 | 하는 일 |
 |---|---|
-| `preprocess.py` | 전처리 기법과 `preprocess(image, steps)` (다른 모듈은 이것만 사용) |
-| `degrade.py` | 정상 사진에서 저조도·흔들림 등 나쁜 조건을 코드로 생성 |
+| `preprocess.py` | 전처리 기법, 품질 진단 `assess_quality`, 전처리 `preprocess` (다른 모듈은 이것만 사용) |
+| `pipeline.py` | 품질 진단 → 전처리 → OCR을 한 번에, 결과를 JSON으로 저장 (모듈 연결용) |
+| `degrade.py` | 정상 사진에서 저조도·흔들림·회전·노이즈 등 나쁜 조건을 코드로 생성 |
 | `ocr_eval.py` | 비교 실험용 OCR 실행기(PaddleOCR / EasyOCR)와 CER 계산 |
-| `experiment.py` | 조건별 전/후 비교 실험, 결과 표와 비교 이미지 저장 |
+| `experiment.py` | 1주차 전/후 비교(`run_experiment`), 2주차 방식별 비교(`run_comparison`) |
 
-실행은 `notebooks/ai2_week1_preprocess.ipynb`를 Colab에서 열어 위에서부터 차례로 돌리면 됩니다.
+실행은 Colab에서 `notebooks/ai2_week2_preprocess.ipynb`를 열고 **런타임 → 모두 실행**을 누르면 됩니다. (1주차 실험은 `ai2_week1_preprocess.ipynb`)
 
-## 사용법 (AI 4 통합용)
+## 사용법 (AI 3·AI 4 연결용)
 
 ```python
 import cv2
-from preprocess import preprocess
+from preprocess import assess_quality, preprocess
+from pipeline import run_pipeline
 
 img = cv2.imread("photo.jpg")
-out = preprocess(img, ["clahe", "sharpen"])  # 원하는 기법을 순서대로
-out = preprocess(img)                         # None이면 사진 품질을 보고 자동 선택
+
+q = assess_quality(img)        # {"issues": [...], "retake": bool, "advice": "다시 찍어 주세요...", "steps": [...]}
+out = preprocess(img)          # steps=None이면 진단 결과대로 자동 전처리
+out = preprocess(img, ["denoise_auto", "stretch"])   # 원하는 기법을 직접 지정해도 됨
+
+result = run_pipeline(img, ocr)   # 진단 + 전처리 + OCR 한 번에 (ocr = OCREngine("paddle"))
 ```
 
-## OpenCV 전처리 기법 조사 (1주차)
+명령줄에서 JSON으로 저장할 수도 있습니다.
+
+```
+python preprocessing/pipeline.py data/raw/p01_c0_1.jpg --engine paddle --out results/sample_output
+```
+
+출력 형식은 `docs/interface.md` 1번을 참고하세요.
+
+## 1주차: OpenCV 전처리 기법 조사
 
 | 기법 (`steps` 이름) | 원리 | 효과를 기대하는 조건 | 주의점 |
 |---|---|---|---|
@@ -33,12 +47,30 @@ out = preprocess(img)                         # None이면 사진 품질을 보�
 | 노이즈 제거 (`denoise`) | 비슷한 무늬의 주변 픽셀끼리 평균을 내어 자글자글한 점을 줄임 (Non-local means) | C1 저조도 (밝힌 뒤 생기는 노이즈) | 느리고, 세게 하면 얇은 글자도 뭉개짐 |
 | 언샤프 마스킹 (`sharpen`) | 흐린 버전과의 차이를 더해 경계를 강조 | C3 흔들림, C9 초점 흐림, C5 작은 글씨 | 블러를 되돌리는 게 아니라 경계만 강조함. 심한 흔들림에는 한계 |
 | 반사광 인페인팅 (`glare`) | 하얗게 날아간 픽셀을 찾아 주변 색으로 메움 | C2 반사광 | 반사광에 완전히 가려진 글자는 복원 불가. 흰 배경을 반사광으로 착각하지 않게 면적 상한을 둠 |
-| 확대 (`upscale`) | 보간으로 사진을 키워 작은 글자를 크게 | C5 작은 글씨·원거리 | 새 정보가 생기지는 않음. 2주차에 딥러닝 초해상도와 비교 예정 |
+| 확대 (`upscale`) | 보간으로 사진을 키워 작은 글자를 크게 | C5 작은 글씨·원거리 | 새 정보가 생기지는 않음. 1주차에서 유일하게 효과가 확인됨 |
 
 **조사하면서 알게 된 점**
 - 이진화(흑백 threshold)는 옛날 OCR에는 좋았지만, 딥러닝 OCR은 컬러·회색조 입력으로 학습되어 있어서 오히려 성능이 떨어지는 경우가 많습니다. 그래서 1주차 기법에서는 뺐습니다.
 - 회전(C6)과 원근·구김(C4) 보정은 글자 영역이나 패키지 모서리를 먼저 찾아야 해서 2주차에 다룹니다. PaddleOCR의 문서 펴기 옵션(`use_doc_unwarping`)과도 비교할 예정입니다.
 - 잘린 화면(C8)은 전처리로 복구할 수 없으므로, "글자가 잘렸으니 오른쪽으로 옮겨 다시 찍어주세요" 같은 촬영 안내로 해결하는 방향을 AI 4와 논의합니다.
+
+## 2주차: 명암·회전·노이즈 보정
+
+| 기법 (`steps` 이름) | 원리 | 쓰는 조건 | 1주차와 달라진 점 |
+|---|---|---|---|
+| 자동 노이즈 제거 (`denoise_auto`) | 사진의 노이즈 세기를 먼저 재고(Immerkær 방식), 그만큼만 Non-local means로 지움 | C1 저조도, C10 노이즈 | 1주차는 세기 고정(5). 세게 지우면 가는 글자 획이 뭉개져서 추정한 노이즈만큼만(최대 12) 약하게 지움 |
+| 명암 늘이기 (`stretch`) | 가장 어두운 1%와 가장 밝은 1%를 기준으로 밝기 범위를 0~255로 넓힘 (밝기 채널만) | C1 저조도 | 1주차 감마 보정은 색 채널 전체를 밝혀 색 노이즈까지 키움 |
+| 밝기 보정 (`brighten`) | 밝기 채널(L)에만 감마를 적용. 이미 밝은 사진은 건드리지 않음 | (비교용) | 색 노이즈를 덜 키움 |
+| 약한 CLAHE (`clahe_soft`) | CLAHE의 증폭 상한을 2.0에서 1.5로 낮춤 | (비교용) | 노이즈를 덜 키움 |
+| 조명 평탄화 (`illumination`) | 사진을 크게 흐린 '배경 밝기'로 나눠 그림자·주름 음영을 지우고 글자 대비는 남김 | C4 구김 | 새로 추가 |
+| 회전 보정 (`rotate`, `rotate_flip`) | ① 글자 줄 방향으로 기울기를 추정 ② 원래 각도·되돌린 각도(·180° 뒤집은 것)를 작은 사진으로 OCR해서 가장 잘 읽히는 쪽 선택 ③ 회전으로 생긴 빈 여백 잘라내기 | C6 회전·뒤집힘 | 새로 추가 |
+| 품질 진단 (`assess_quality`) | 밝기, 선명도 지수(선명도 ÷ 대비²), 노이즈, 글자 높이, 기울기를 재서 문제와 재촬영 여부, 추천 전처리를 정함 | 모든 사진 | 1주차 `auto_steps`를 대체. 재촬영 안내 문구 추가 |
+
+**만들면서 알게 된 점**
+- **기울기 추정은 배경에 속기 쉽습니다.** 햇빛 받은 바닥 나뭇결을 글자 줄로 착각해 -75°로 잡는 경우가 있었습니다. 그래서 추정만으로 돌리지 않고 **OCR로 확인한 뒤** 돌립니다. 이 확인 덕분에 잘못 돌리는 일이 없었습니다.
+- **반사광은 픽셀 통계로 잡히지 않습니다.** 휴대폰이 밝은 부분을 부드럽게 처리해서, 반사광이 하얗게 날아간 점이 아니라 글자 위의 뿌연 막처럼 찍힙니다. 대신 OCR 확신도가 낮은 줄이 많으면 다시 찍게 하는 방향을 AI 4와 논의합니다.
+- **흔들림은 선명도 지수로 잘 잡힙니다.** 정상 0.10 이상, 흔들림 0.02~0.04로 뚜렷하게 나뉘어서 재촬영 안내에 씁니다.
+- 자동 선택(`auto`)은 비용 때문에 180° 뒤집힘을 확인하지 않습니다. 뒤집힌 사진은 OCR 확신도가 매우 낮게 나오므로, 그때 한 번 더 뒤집어 보는 처리를 AI 4 쪽 흐름에 넣는 것을 제안합니다.
 
 ## CER 계산 방식
 

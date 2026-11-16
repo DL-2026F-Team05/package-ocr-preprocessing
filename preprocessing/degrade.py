@@ -62,6 +62,13 @@ def defocus(img: np.ndarray, level: int = 2) -> np.ndarray:
     return cv2.GaussianBlur(img, (0, 0), sigma)
 
 
+def gaussian_noise(img: np.ndarray, level: int = 2, seed: int = 0) -> np.ndarray:
+    """노이즈(C10): 밝기는 그대로 두고 자글자글한 점만 더함. 저조도와 따로 노이즈 보정 효과를 보려고 추가."""
+    sigma = {1: 10, 2: 20, 3: 35}[level]
+    noise = np.random.default_rng(seed).normal(0, sigma, img.shape)
+    return np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+
+
 # 조건 ID → [(단계 태그, 만드는 함수)]
 SPECS = {
     "c1": [(f"L{i}", lambda im, i=i: low_light(im, i)) for i in (1, 2, 3)],
@@ -69,6 +76,7 @@ SPECS = {
     "c6": [(f"L{i}", lambda im, d=d: rotate(im, d)) for i, d in enumerate((15, 45, 90, 180), 1)],
     "c8": [(f"L{i}", lambda im, r=r: crop_edge(im, r)) for i, r in enumerate((0.2, 0.4), 1)],
     "c9": [(f"L{i}", lambda im, i=i: defocus(im, i)) for i in (1, 2, 3)],
+    "c10": [(f"L{i}", lambda im, i=i: gaussian_noise(im, i)) for i in (1, 2, 3)],
 }
 
 

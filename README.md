@@ -34,23 +34,25 @@ package-ocr-preprocessing/
 ## 실행 방법
 
 1. `data/raw/`에 사진을 올리고, `data/labels/labels.csv`에 정답을 적습니다.
-2. Colab에서 `notebooks/ai2_week1_preprocess.ipynb`를 열고 위에서부터 차례로 실행합니다.
-3. 결과는 `results/ai2_week1/`에 저장됩니다.
+2. Colab에서 `notebooks/ai2_week2_preprocess.ipynb`를 열고 **런타임 → 모두 실행**을 누릅니다. (1주차 실험은 `ai2_week1_preprocess.ipynb`)
+3. 결과는 `results/ai2_week2/paddle/`에 저장되고, 마지막 셀에서 압축 파일로 내려받아집니다.
 
 > 비공개 레포라면 Colab 왼쪽 열쇠 아이콘(보안 비밀)에 `GITHUB_TOKEN`으로 토큰을 저장해야 합니다. 코드에 토큰을 직접 붙여넣지 마세요.
 
-## 다른 모듈에서 쓰는 법 (AI 4 통합용)
+## 다른 모듈에서 쓰는 법 (AI 3·AI 4 연결용)
 
 ```python
 import cv2
-from preprocess import preprocess
+from preprocess import assess_quality, preprocess
+from pipeline import run_pipeline
 
 img = cv2.imread("photo.jpg")
-out = preprocess(img, ["clahe", "sharpen"])  # 원하는 기법을 순서대로
-out = preprocess(img)                         # None이면 사진 품질을 보고 자동 선택
+q = assess_quality(img)          # 문제 진단 + 재촬영 안내 문구 + 추천 전처리
+out = preprocess(img)            # 진단 결과대로 자동 전처리
+result = run_pipeline(img, ocr)  # 진단 → 전처리 → OCR을 한 번에 (JSON으로 저장 가능)
 ```
 
-입출력 형식은 `docs/interface.md`를 참고하세요.
+입출력 형식은 `docs/interface.md`, 실제 출력 예시는 `results/ai2_week2/easyocr/sample_output/`을 참고하세요.
 
 ## 데이터 규칙
 
@@ -66,11 +68,14 @@ out = preprocess(img)                         # None이면 사진 품질을 보�
 | C3 | 흔들림 | 코드 생성 3단계 | 3 |
 | C4 | 구김 | 촬영 | 3 |
 | C5 | 작은 글씨·원거리 | 촬영 | 2 |
+| C6 | 회전·뒤집힘 | 코드 생성 4단계 (15°, 45°, 90°, 180°) | 4 |
+| C10 | 노이즈 | 코드 생성 3단계 (σ 10, 20, 35) | 3 |
 
-확장 조건(C6 회전, C7 곡면, C8 잘린 화면, C9 초점 흐림)은 2주차부터 다룹니다.
+C7 곡면, C8 잘린 화면, C9 초점 흐림은 필요하면 3주차에 추가합니다.
 
 ## 진행 상황
 
 | 주차 | 기간 | 목표 | 상태 |
 |---|---|---|---|
-| 1주차 | 11/03 ~ 11/08 | 품질 문제 분석, 전처리 기법 조사, 기본 전처리 구현 | 진행 중 |
+| 1주차 | 11/03 ~ 11/08 | 품질 문제 분석, 전처리 기법 조사, 기본 전처리 구현 | 완료 ([결과](results/ai2_week1/analysis.md)) |
+| 2주차 | 11/12 ~ 11/18 | 명암·회전·노이즈 보정 구현, 전처리 전후 OCR 성능 비교, 모듈 연결 | EasyOCR 사전 실험 완료 ([결과](results/ai2_week2/analysis.md)), PaddleOCR 확인 중 |
