@@ -21,6 +21,7 @@ import pandas as pd
 
 from degrade import generate_variants
 from ocr_eval import region_cer
+from pipeline import run_pipeline
 from preprocess import RECIPES_V1, RECIPES_V2, assess_quality, load_image, measure, preprocess
 
 COND_NAMES = {
@@ -203,6 +204,7 @@ def write_markdown(df: pd.DataFrame, summary: pd.DataFrame, path) -> None:
 # 2주차: 전처리 없음 vs 1주차(v1) vs 2주차(v2) vs 자동(auto) 비교
 # ===========================================================================
 VARIANT_LABELS = {"none": "전처리 없음", "v1": "1주차", "v2": "2주차", "auto": "자동 선택"}
+# auto = 실제 서비스 흐름(pipeline.run_pipeline): 품질 진단으로 전처리를 고르고, OCR 확신도가 낮을 때만 방향을 다시 확인
 REGIONS = {"expiry": "유통기한", "name": "제품명", "allergen": "알레르기 성분"}
 
 
@@ -216,6 +218,26 @@ def _steps_for(variant: str, cond: str, quality: dict) -> list[str]:
     if variant == "auto":
         return list(quality["steps"])
     raise ValueError(variant)
+
+
+def _run_auto(img, ocr, quality: dict, done: dict, panels: list):
+    """auto 방식: run_pipeline을 그대로 쓰되, 같은 전처리로 이미 돌린 OCR 결과가 있으면 재사용합니다."""
+    steps = list(quality["steps"])
+    first = done.get(tuple(steps))
+    start = time.time()
+    out = run_pipeline(img, ocr, quality=quality, first_result=first["result"] if first else None,
+                       return_image=True)
+    rotation = out["preprocess"]["rotation"]
+    key = tuple(steps) + (("rotate",) if rotation else ())
+    if key in done:
+        for p in panels:
+            if p[1] == key:
+                p[0].append("auto")
+    else:
+        sec = time.time() - start + (first["sec"] if first else 0)
+        done[key] = {"result": out["ocr"], "info": {"rotation": rotation}, "sec": round(sec, 2)}
+        panels.append((["auto"], key, out["image"]))
+    return list(key), key, out["quality"]["retake"]
 
 
 def run_comparison(paths, ocr, labels: dict, out_dir, variants=("none", "v1", "v2", "auto"),
@@ -238,9 +260,15 @@ def run_comparison(paths, ocr, labels: dict, out_dir, variants=("none", "v1", "v
         done: dict[tuple, dict] = {}
         panels: list[tuple[list[str], tuple, np.ndarray]] = []
         for variant in variants:
-            steps = _steps_for(variant, cond, quality)
-            key = tuple(steps)
-            if key not in done:
+            retake = quality["retake"]
+            if variant == "auto":
+                steps, key, retake = _run_auto(img, ocr, quality, done, panels)
+            else:
+                steps = _steps_for(variant, cond, quality)
+                key = tuple(steps)
+            if variant == "auto":
+                pass   # _run_auto가 OCR 결과와 비교 이미지 칸을 이미 채움
+            elif key not in done:
                 info: dict = {}
                 start = time.time()
                 processed = preprocess(img, steps, ocr=ocr, info=info) if steps else img
@@ -259,7 +287,7 @@ def run_comparison(paths, ocr, labels: dict, out_dir, variants=("none", "v1", "v
                 "condition_name": COND_NAMES.get(cond, cond), "tag": tag, "source": path.parent.name,
                 "variant": variant, "steps": "+".join(steps) or "none", "n_boxes": len(res["result"]),
                 "mean_score": round(float(np.mean(scores)), 3) if scores else 0.0, "sec": res["sec"],
-                "issues": ",".join(quality["issues"]), "retake": quality["retake"],
+                "issues": ",".join(quality["issues"]), "retake": retake,
                 **quality["metrics"],
                 "rotation": res["info"].get("rotation", 0), "ocr_text": text,
             }

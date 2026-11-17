@@ -7,6 +7,7 @@
     "issues": [
       "skewed"
     ],
+    "ocr_confidence": 0.423,
     "metrics": {
       "brightness": 0.395,
       "contrast": 0.252,
@@ -20,10 +21,9 @@
     }
   },
   "preprocess": {
-    "steps": [
-      "rotate"
-    ],
-    "rotation": 315.99
+    "steps": [],
+    "rotation": 315.99,
+    "orientation_checked": true
   },
   "ocr": [
     {
@@ -2337,5 +2337,5 @@
       "score": 0.5954720201509043
     }
   ],
-  "elapsed_sec": 50.26
+  "elapsed_sec": 85.23
 }

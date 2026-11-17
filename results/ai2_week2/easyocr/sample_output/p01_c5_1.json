@@ -8,6 +8,7 @@
       "too_far",
       "skewed"
     ],
+    "ocr_confidence": 0.345,
     "metrics": {
       "brightness": 0.464,
       "contrast": 0.263,
@@ -22,10 +23,10 @@
   },
   "preprocess": {
     "steps": [
-      "upscale",
-      "rotate"
+      "upscale"
     ],
-    "rotation": 0.0
+    "rotation": 0.0,
+    "orientation_checked": true
   },
   "ocr": [
     {
@@ -865,5 +866,5 @@
       "score": 0.05244520572937137
     }
   ],
-  "elapsed_sec": 34.0
+  "elapsed_sec": 34.61
 }

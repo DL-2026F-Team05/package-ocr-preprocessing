@@ -5,6 +5,7 @@
     "retake": false,
     "advice": "",
     "issues": [],
+    "ocr_confidence": 0.433,
     "metrics": {
       "brightness": 0.485,
       "contrast": 0.271,
@@ -19,7 +20,8 @@
   },
   "preprocess": {
     "steps": [],
-    "rotation": 0
+    "rotation": 0.0,
+    "orientation_checked": true
   },
   "ocr": [
     {
@@ -2289,5 +2291,5 @@
       "score": 0.08013556671454163
     }
   ],
-  "elapsed_sec": 16.77
+  "elapsed_sec": 29.65
 }

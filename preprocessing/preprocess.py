@@ -352,18 +352,29 @@ def _text_height(gray: np.ndarray) -> float:
 
 # 진단 기준값. 1주차·2주차 사진(정상/저조도/흔들림/원거리)의 측정값을 보고 정했습니다.
 THRESHOLDS = {
-    "too_dark": 0.08,        # brightness 이 값 미만: 재촬영 권장
-    "dark": 0.35,            # brightness 이 값 미만: 밝기 보정
+    "too_dark": 0.08,        # brightness 이 값 미만: 재촬영 권장 (전처리하지 않음)
+    "dark": 0.35,            # brightness 이 값 미만: 노이즈 제거 + 명암 늘이기
     "blurry": 0.06,          # sharpness_index 이 값 미만: 흔들림 (정상 0.10 이상, 흔들림 0.02~0.04)
-    "noisy": 4.0,            # noise 이 값 초과: 노이즈 제거 (정상 1~3)
+    "noisy": 4.0,            # noise 이 값 초과: 노이즈 많음 (정상 1~3). 진단만 하고 전처리는 안 함
     "too_far": 5.0,          # text_height 이 값 이하: 너무 멀리서 찍음 (정상 9, 원거리 4)
-    "skew": 3.0,             # 추정 기울기(도) 이 값 이상이고 확신도 0.3 이상이면 회전 보정 시도
+    "skew": 3.0,             # 추정 기울기(도) 이 값 이상이고 확신도 0.3 이상이면 기울어짐으로 표시
+}
+
+# OCR 확신도(글자 줄별 score의 평균) 기준. OCR 엔진마다 점수 범위가 달라 따로 둡니다.
+# - paddle: 2주차 실험에서 확신도 0.8 미만인 사진 9장 중 7장이 오류율 0.34 이상(정상 사진은 0.05).
+#           정상 사진은 0.90 이상, 뒤집힌 사진은 0.44였습니다.
+# - easyocr: 같은 사진들에서 정상 0.37~0.48, 흔들림·원거리·뒤집힘 0.2 미만 (개발용 참고값)
+# retry_rotation 미만이면 회전·뒤집힘을 의심하고 방향을 다시 확인, 그 뒤에도 retake 미만이면 재촬영 안내
+CONFIDENCE = {
+    "paddle": {"retry_rotation": 0.80, "retake": 0.70},
+    "easyocr": {"retry_rotation": 0.45, "retake": 0.20},
 }
 
 ADVICE = {
     "too_dark": "사진이 너무 어둡습니다. 밝은 곳에서 다시 찍어 주세요.",
     "blurry": "사진이 흔들렸습니다. 휴대폰을 잠시 멈춘 채로 다시 찍어 주세요.",
     "too_far": "글자가 너무 작게 찍혔습니다. 제품에 조금 더 가까이 대고 찍어 주세요.",
+    "low_confidence": "글자가 잘 읽히지 않습니다. 빛 반사가 없는 밝은 곳에서 제품을 펴서 다시 찍어 주세요.",
 }
 
 
@@ -376,6 +387,12 @@ def assess_quality(img: np.ndarray) -> dict:
     - retake: 전처리로 해결하기 어려워 다시 찍는 게 나은 경우 True
     - advice: AI 4가 음성으로 읽어 줄 재촬영 안내 문구(retake일 때만)
     - steps: preprocess에 그대로 넘길 추천 전처리 목록
+
+    PaddleOCR 실험 결과를 반영한 규칙:
+    - 어두움(dark)만 전처리합니다. 너무 어두운(too_dark) 사진은 전처리하면 오히려 나빠져서 재촬영만 안내합니다.
+    - 노이즈는 지우면 나빠져서 진단만 합니다.
+    - 기울어짐(skewed)은 픽셀 계산만으로는 잘못 잡는 경우가 많아(정상 사진 20장 중 4장) 표시만 하고,
+      실제 회전 보정은 pipeline.run_pipeline이 OCR 확신도를 보고 정합니다.
     """
     m = measure(img)
     t = THRESHOLDS
@@ -386,12 +403,10 @@ def assess_quality(img: np.ndarray) -> dict:
         issues.append("too_dark")
     if m["brightness"] < t["dark"]:
         issues.append("dark")
-    if m["noise"] > t["noisy"] or m["brightness"] < t["dark"]:
-        if m["noise"] > t["noisy"]:
-            issues.append("noisy")
-        steps.append("denoise_auto")
-    if m["brightness"] < t["dark"]:
-        steps.append("stretch")
+        if "too_dark" not in issues:
+            steps += ["denoise_auto", "stretch"]
+    if m["noise"] > t["noisy"]:
+        issues.append("noisy")
     if m["brightness"] >= 0.15 and m["sharpness_index"] < t["blurry"]:
         issues.append("blurry")
     # 노이즈가 심하면 글자 획이 끊겨 글자 높이가 작게 재지므로 거리 판단을 건너뜀
@@ -400,7 +415,6 @@ def assess_quality(img: np.ndarray) -> dict:
         steps.append("upscale")
     if abs(skew) >= t["skew"] and conf >= 0.3:
         issues.append("skewed")
-        steps.append("rotate")
     retake = [i for i in ("too_dark", "blurry", "too_far") if i in issues]
     return {
         "metrics": m,
@@ -453,9 +467,12 @@ RECIPES_V1 = {
     "c10": ["denoise"],
 }
 
-# 2주차 조합. 명암·회전·노이즈 보정 후보를 EasyOCR로 먼저 비교해서 골랐습니다(results/ai2_week2 참고).
-# - 저조도: 노이즈 제거 → 명암 늘이기가 가장 좋았음 (평균 CER 0.568 → 0.406, 1주차 조합 0.484)
-# - 노이즈·구김: 사전 실험에서 뚜렷한 효과가 없어 PaddleOCR로 다시 확인하는 조합
+# 2주차 조건별 조합(실험 기록용). 결과는 results/ai2_week2/analysis.md 참고.
+# 실제 서비스는 조건을 모르므로 이 표 대신 pipeline.run_pipeline(품질 진단 + OCR 확신도)을 씁니다.
+# PaddleOCR 기준 평균 CER (전처리 없음 → 이 조합):
+# - 회전(rotate_flip): 0.251 → 0.050  (180° 뒤집힘 0.754 → 0.067)
+# - 저조도: 0.217 → 0.225  (조금 어두운 사진은 좋아지고, 실제로 아주 어두운 사진은 나빠짐)
+# - 원거리(upscale): 0.669 → 0.620 / 노이즈: 0.079 → 0.097 / 구김: 0.249 → 0.245
 RECIPES = {
     "c0": [],
     "c1": ["denoise_auto", "stretch"],
