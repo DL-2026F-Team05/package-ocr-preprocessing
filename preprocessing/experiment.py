@@ -66,13 +66,18 @@ def load_labels(path) -> dict[str, dict[str, str]]:
     return labels
 
 
-def generate_from_clean(raw_dir, gen_dir, conditions=("c1", "c3")) -> list[Path]:
-    """제품마다 첫 번째 정상(C0) 사진으로 저조도·흔들림 사진을 만들어 gen_dir에 저장."""
+def generate_from_clean(raw_dir, gen_dir, conditions=("c1", "c3"), products=None) -> list[Path]:
+    """제품마다 첫 번째 정상(C0) 사진으로 저조도·흔들림 사진을 만들어 gen_dir에 저장.
+
+    products: 만들 제품 번호 목록(예: ["p01"]). None이면 모든 제품.
+    """
     gen_dir = Path(gen_dir)
     gen_dir.mkdir(parents=True, exist_ok=True)
     sources: dict[str, Path] = {}
     for p in list_images(raw_dir)[0]:
         pid, cond, _ = parse_name(p)
+        if products is not None and pid not in products:
+            continue
         if cond == "c0":
             sources.setdefault(pid, p)
     made = []
