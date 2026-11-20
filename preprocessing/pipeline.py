@@ -78,7 +78,8 @@ def run_pipeline(image: np.ndarray, ocr: Callable, steps: list[str] | None = Non
             "ocr_confidence": round(confidence, 3),
             "metrics": quality["metrics"],
         },
-        "preprocess": {"steps": steps, "rotation": info.get("rotation", 0), "orientation_checked": retried},
+        "preprocess": {"steps": steps, "rotation": info.get("rotation", 0), "orientation_checked": retried,
+                       "rotation_scores": {str(k): v for k, v in info.get("candidates", {}).items()}},
         "ocr": result,
         "elapsed_sec": round(time.time() - start, 2),
     }

@@ -70,6 +70,7 @@ result = run_pipeline(image, ocr)
 
 - `quality.ocr_confidence`: OCR `score`의 평균. PaddleOCR 기준 정상 사진은 0.9 이상입니다. 0.8 미만이면 사진이 돌아가거나 뒤집혔을 수 있어서 방향을 다시 확인하고(`orientation_checked: true`), 그래도 0.7 미만이면 `retake`를 `true`로 바꾸고 "글자가 잘 읽히지 않습니다..." 안내를 넣습니다.
 - `preprocess.rotation`: 방향을 고쳤으면 시계 방향 각도(예: 뒤집힌 사진은 180), 아니면 0
+- `preprocess.rotation_scores`: (방향을 확인한 경우만) 후보 각도별 OCR 점수. 0°, 90°, 180°, 270°와 기울기를 되돌린 각도를 비교합니다(확인용).
 - `paddle/sample_output/`은 이 기능을 넣기 전에 만들어서 `ocr_confidence`, `orientation_checked`가 없습니다.
 
 - `ocr`의 `box` 좌표는 **전처리(회전·확대)를 거친 사진 기준**입니다. 원본 사진 위에 표시하려면 `preprocess.rotation`(시계 방향 각도)을 참고하세요.

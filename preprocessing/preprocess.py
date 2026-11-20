@@ -279,7 +279,9 @@ def fix_rotation(img: np.ndarray, ocr: Callable | None = None, check_flip: bool 
                  info: dict | None = None) -> np.ndarray:
     """회전 보정. 기울기를 추정한 뒤, OCR이 있으면 후보 각도마다 읽혀 보고 가장 잘 읽히는 쪽을 고릅니다.
 
-    - 후보: 그대로(0°), 추정 각도만큼 되돌리기, (check_flip=True면) 각각을 180° 뒤집은 것
+    - 후보: 그대로(0°), 추정 각도만큼 되돌리기
+      (check_flip=True면) 90°, 180°, 270°와 되돌린 각도의 180° 반대편도 확인합니다.
+      90°·270°는 3주차에 추가: 콜라 캔처럼 원재료 표가 세로로 인쇄된 포장이 있었습니다.
     - 기울기 추정 확신도가 0.5 이상이면 되돌린 후보에 15% 가산점 (수평 글자가 더 잘 읽히므로)
     - 각도를 되돌리면 귀퉁이에 빈 여백이 생기므로 글자 영역만 남기고 잘라냅니다(crop_to_text).
     - OCR이 없으면 확신도가 높고 각도가 2~45° 사이일 때만 되돌립니다(보수적).
@@ -287,10 +289,16 @@ def fix_rotation(img: np.ndarray, ocr: Callable | None = None, check_flip: bool 
     """
     angle, conf = estimate_skew(img)
     candidates = [0.0]
-    if conf >= 0.3 and abs(angle) >= 2:
+    deskew = conf >= 0.3 and abs(angle) >= 2
+    if deskew:
         candidates.append(-angle)
     if check_flip:
-        candidates += [c + 180 for c in candidates]
+        candidates += [90.0, 180.0, 270.0] + ([180 - angle] if deskew else [])
+        unique: list[float] = []
+        for c in candidates:   # 1° 안쪽으로 겹치는 후보는 하나만 남김
+            if all(min(abs(c - u) % 360, 360 - abs(c - u) % 360) >= 1 for u in unique):
+                unique.append(c)
+        candidates = unique
     if ocr is None:
         chosen = -angle if (conf >= 0.6 and 2 <= abs(angle) <= 45) else 0.0
         scores = {}
@@ -300,9 +308,9 @@ def fix_rotation(img: np.ndarray, ocr: Callable | None = None, check_flip: bool 
         scale = min(1.0, 960 / max(img.shape[:2]))   # 모든 후보를 같은 배율로 줄여 공정하게 비교
         images = {c: _rotate_and_trim(img, c) for c in candidates}
         scores = {c: ocr_score(ocr, im, scale) for c, im in images.items()}
-        if conf >= 0.5:   # 기울기 추정이 확실하면, 수평으로 되돌린 후보에 15% 가산점
+        if conf >= 0.5 and deskew:   # 기울기 추정이 확실하면, 수평으로 되돌린 후보에 15% 가산점
             for c in scores:
-                if c % 180 != 0:
+                if c % 90 != 0:
                     scores[c] *= 1.15
         chosen = max(scores, key=scores.get)
     if info is not None:
@@ -372,7 +380,8 @@ CONFIDENCE = {
 
 ADVICE = {
     "too_dark": "사진이 너무 어둡습니다. 밝은 곳에서 다시 찍어 주세요.",
-    "blurry": "사진이 흔들렸습니다. 휴대폰을 잠시 멈춘 채로 다시 찍어 주세요.",
+    # 3주차: 흔들림뿐 아니라 대비가 낮은 포장(빨간 바탕 캔 등)도 이 값이 낮게 나와서, 원인을 단정하지 않는 문장으로 바꿈
+    "blurry": "글자가 또렷하게 찍히지 않았습니다. 휴대폰을 잠시 멈추고, 글자가 있는 면을 밝은 곳에서 정면으로 찍어 주세요.",
     "too_far": "글자가 너무 작게 찍혔습니다. 제품에 조금 더 가까이 대고 찍어 주세요.",
     "low_confidence": "글자가 잘 읽히지 않습니다. 빛 반사가 없는 밝은 곳에서 제품을 펴서 다시 찍어 주세요.",
 }
